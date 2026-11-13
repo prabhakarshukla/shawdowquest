@@ -1,0 +1,11 @@
+.launch-screen {
+    -fx-background-color: #171b2e;
+}
+
+.game-title {
+    -fx-font-family: "System";
+    -fx-font-size: 36px;
+    -fx-font-weight: bold;
+    -fx-text-fill: #f3e6bf;
+    -fx-text-alignment: center;
+}

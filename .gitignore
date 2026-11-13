@@ -1,0 +1,45 @@
+# Maven and compiled Java output
+target/
+*.class
+*.jar
+*.war
+*.ear
+!.mvn/wrapper/maven-wrapper.jar
+*.log
+hs_err_pid*
+replay_pid*
+
+# Local tooling and caches
+.tools/
+.m2/
+
+# VS Code and other local IDE state
+.vscode/
+*.code-workspace
+.idea/
+*.iml
+.classpath
+.project
+.settings/
+bin/
+out/
+
+# OS files and local secrets
+.DS_Store
+Thumbs.db
+Desktop.ini
+.env
+.env.*
+!.env.example
+*.jks
+*.keystore
+*.p12
+*.pfx
+*.key
+*.pem
+*.hprof
+*.tmp
+*.swp
+*~
+
+# Preserve Maven Wrapper configuration and scripts in version control.
