@@ -1,7 +1,7 @@
 # Shadow Quest: The Lost Realm
 # Java project technical documentation and learning report
 
-Verified against the source code and tests on November 13, 2026. This guide
+Updated for Phase 2.4 on November 14, 2026; earlier dated results remain historical. This guide
 explains each file, its actual Java concepts, and its connections to other files.
 The development history follows the learning sections. Plans describe intended
 features; only source code and observed verification establish implemented work.
@@ -17,17 +17,22 @@ features; only source code and observed verification establish implemented work.
 7. [Viva preparation](#viva-preparation)
 8. [Current verification](#current-verification)
 9. [Development history](#development-history)
+10. [Phase 2.1 launch diagnosis](#phase-21-javafx-launch-verification-and-diagnosis)
+11. [Phase 2.2 Canvas foundation](#phase-22-static-canvas-title-screen)
+12. [Phase 2.3 loop foundation and new Java files](#phase-23-animationtimer-game-loop-foundation)
+13. [Phase 2.4 input and movement](#phase-24-keyboard-input-and-player-movement)
 
 ## Scope and vocabulary
 
-There are nine production Java files: seven classes and two enums. There are
-three test Java files, with one additional nested test-only class inside
+There are thirteen production Java files: eleven classes and two enums. There are
+seven test Java files, with one additional nested test-only class inside
 CharacterTest. The implemented scope is the title-screen foundation plus game
 states, character health/statistics, coordinates, and player movement calculations.
-The title screen does not yet create a Game or accept keyboard movement.
+The static title has no loop. Enter opens a separate movement screen with a fresh Game; WASD and arrow keys move a temporary circle.
 
-The code defines JavaFX startup, but local visual verification is blocked by
-Windows Application Control. This is not yet a verified playable game. The core
+Phase 2.1 verified the actual JavaFX title window and normal window close locally.
+The previous Windows Application Control error did not recur in that run.
+This is not yet a playable game. The core
 foundation is only a subset of the broader Phase 1 described in PROJECT_PLAN.md.
 
 | Term | Meaning and example |
@@ -58,21 +63,21 @@ All production packages are under `src/main/java/com/shadowquest/`.
 | Folder | Actual contents | Responsibility/status |
 | --- | --- | --- |
 | app | Main.java | Implemented JavaFX entry point |
-| core | Game.java, GameConfig.java, GameState.java | Implemented session coordination, constants, and state vocabulary |
-| ui | ScreenManager.java, MainMenuScreen.java | Implemented title screen; multiple-screen navigation is pending |
+| core | Game.java, GameConfig.java, GameState.java, FrameClock.java, GameLoop.java | Session coordination, constants, state vocabulary, timing, and JavaFX loop adapter |
+| ui | ScreenManager.java, MainMenuScreen.java, GameScreen.java | Static title, movement screen, navigation and loop/input lifecycle |
 | player | Character.java, Player.java, .gitkeep | Implemented health and movement foundation; no combat/inventory |
 | utils | Direction.java, .gitkeep | Shared movement enum; no collision helper yet |
 | enemy | .gitkeep only | Reserved for enemies |
 | items | .gitkeep only | Reserved for items, inventory, and collection |
 | levels | .gitkeep only | Reserved for level models and progression |
-| input | .gitkeep only | Reserved for keyboard-to-action conversion |
+| input | InputHandler.java, .gitkeep | Held-key tracking and horizontal/vertical input axes |
 | render | .gitkeep only | Reserved for Canvas world rendering and assets |
 | persistence | .gitkeep only | Reserved for saving and loading domain data |
 
 `src/main/resources/` contains `styles/launch.css`. Its `images/`, `maps/`,
 and `audio/` folders contain only `.gitkeep` markers. No game art/audio is present.
 
-Under `src/test/java/com/shadowquest/`, `core/` contains GameTest.java and
+Under `src/test/java/com/shadowquest/`, `core/` contains GameTest.java and FrameClockTest.java and
 `player/` contains CharacterTest.java, PlayerTest.java, and .gitkeep. The test
 folders enemy, items, levels, and persistence contain only .gitkeep markers.
 
@@ -97,8 +102,8 @@ performs a build task.
 | junit.version | 5.13.4, the pinned test library version |
 
 `javafx-controls` provides controls such as Label and transitively brings in
-JavaFX graphics/base. Canvas is available from graphics, but the project does
-not create one yet. `junit-jupiter` has test scope, so JUnit is used to compile
+JavaFX graphics/base. MainMenuScreen now uses Canvas from graphics.
+`junit-jupiter` has test scope, so JUnit is used to compile
 and run tests rather than as an application dependency.
 
 The compiler plugin 3.14.0 compiles Java; Surefire 3.5.3 runs tests; the JavaFX
@@ -111,7 +116,7 @@ build, FXML dependency, Swing usage, database, or third-party game engine.
 
 | Repository-relative file | Explanation |
 | --- | --- |
-| src/main/resources/styles/launch.css | `.launch-screen` uses background #171b2e. `.game-title` uses System font, size 36px, bold weight, #f3e6bf text, and centered text alignment. MainMenuScreen attaches these classes; CSS changes appearance, not game rules. |
+| src/main/resources/styles/launch.css | `.launch-screen` uses background #171b2e. `.game-title` uses System font, size 36px, bold weight, #f3e6bf text, and centered text alignment. Historical style resource retained unchanged; the Canvas screen no longer loads it. Its colors and font were transferred to drawing constants. |
 | mvnw | Official Unix Maven Wrapper launcher 3.3.4. Reads wrapper properties, downloads Maven if absent, then forwards the requested command. README uses `sh ./mvnw`. |
 | mvnw.cmd | Official Windows wrapper launcher using batch/PowerShell logic. Forwards commands to Maven. Credential-variable names in the script do not contain stored credentials. |
 | .mvn/wrapper/maven-wrapper.properties | Pins wrapper 3.3.4, only-script distribution, and Maven 3.9.11 via HTTPS Maven Central. There is no pinned distribution checksum in this file. |
@@ -132,6 +137,13 @@ belongs in the source commit. `.git/` is local Git metadata, not an application
 resource or a normal committed project file.
 
 ## Production Java files
+
+Phase 2.4 below documents every new/modified Java file and its current method
+contracts. It supersedes earlier four-direction and disconnected-input details.
+
+The Phase 2.3 section provides the complete file-by-file explanations for the
+new FrameClock.java and GameLoop.java, plus FrameClockTest.java. Existing files
+are described here; ScreenManager includes its Phase 2.3 lifecycle changes.
 
 ### Main.java
 
@@ -181,7 +193,7 @@ repeating the title and scene dimensions across UI files.
 
 | Field | Type/modifiers | Value and use |
 | --- | --- | --- |
-| TITLE | public static final String | "Shadow Quest: The Lost Realm", used for the Stage title and Label text |
+| TITLE | public static final String | "Shadow Quest: The Lost Realm", used for the Stage title and Canvas text |
 | VIEWPORT_WIDTH | public static final int | 960, passed to the Scene constructor |
 | VIEWPORT_HEIGHT | public static final int | 600, passed to the Scene constructor |
 
@@ -253,6 +265,7 @@ instance has its own fields. No static shared player or session state exists.
 | --- | --- | --- |
 | getState | none / GameState | Returns the current state |
 | getPlayer | none / Player | Returns the actual player reference, or null before start; not a copy |
+| movePlayer | int horizontal, int vertical, double deltaTime / void | Delegates to Player.move only in PLAYING; other states ignore the movement command |
 | startNewGame | none / void | From MENU or GAME_OVER, creates new Player("Arin") and then sets PLAYING; otherwise leaves state/player unchanged |
 | pause | none / void | Changes PLAYING to PAUSED; other states are unchanged |
 | resume | none / void | Changes PAUSED to PLAYING; other states are unchanged |
@@ -404,21 +417,14 @@ not declare a second copy of health or position.
 | getSpeed | none / double | Returns speed |
 | move | Direction direction, double deltaTime / void | Validates inputs, calculates distance, skips dead-player movement, and calls inherited moveBy for the selected direction |
 
-move performs these steps in order:
-
-1. Reject null direction.
-2. Reject negative/non-finite elapsed seconds.
-3. Compute local `double distance = speed * deltaTime`.
-4. Reject a non-finite distance, including multiplication overflow.
-5. Return if the player is dead.
-6. Use the direction switch to apply displacement through moveBy.
-
-| Direction | Actual call | Effect |
-| --- | --- | --- |
-| UP | moveBy(0, -distance) | Decreases Y |
-| DOWN | moveBy(0, distance) | Increases Y |
-| LEFT | moveBy(-distance, 0) | Decreases X |
-| RIGHT | moveBy(distance, 0) | Increases X |
+The Direction overload rejects null and maps UP/DOWN/LEFT/RIGHT to axes
+(0,-1)/(0,1)/(-1,0)/(1,0), then delegates to move(int,int,double).
+The digital-axis overload validates axes in [-1,1], elapsed time, and finite
+distance. Dead players and zero input do not move. Otherwise it divides both
+axes by Math.hypot(horizontal, vertical) and multiplies each normalized component
+by speed * deltaTime before calling inherited moveBy. This preserves the old
+cardinal behavior and gives diagonals the same total speed. See Phase 2.4 for
+all method contracts and examples.
 
 At speed 200, RIGHT for 0.25 seconds changes X by 50. Ten steps of 0.1 seconds
 travel the same distance as one step of 1 second, within floating-point precision.
@@ -440,9 +446,8 @@ until boundaries/collisions exist. Dead players still reject invalid arguments.
 | Exception validation | IllegalArgumentException rejects invalid direction/time and distance overflow. |
 | Packages/imports | Imports Direction from utils. Character is in the same package. There is no Game or JavaFX import. |
 
-Player currently overrides no methods and declares no overloads. Inheriting heal
-is different from overriding it. Weapons, inventory, animations, and input handling
-are not present.
+Player overrides no methods. Phase 2.4 adds the move(int, int, double) overload; the original Direction overload delegates to it. Inheriting heal
+is different from overriding it. Weapons, inventory, and animations are not present. Input handling lives in InputHandler, outside Player.
 
 ### Direction.java
 
@@ -455,8 +460,7 @@ coupling Player to JavaFX key codes.
 #### B. Code explanation
 
 The constants are UP, DOWN, LEFT, and RIGHT. There are no custom fields,
-constructors, or methods. Direction does not store vectors; Player's switch
-implements the coordinate changes.
+constructors, or methods. Direction does not store vectors; Player maps these values to digital axes and delegates to its normalized movement overload.
 
 Example: `player.move(Direction.RIGHT, 0.25)`. The String `"RIGHT"` cannot be
 passed directly. Null is still possible for a reference, so Player checks it.
@@ -474,7 +478,7 @@ keyboard binding or event handler.
 
 Exact path: `C:\java game\src\main\java\com\shadowquest\ui\ScreenManager.java`.
 Declaration: `public final class ScreenManager`. It separates scene presentation
-from Main. Only the title screen is currently managed; full navigation is pending.
+from Main. Title and movement-demo scenes are managed; see the Phase 2.4 method/lifecycle details below.
 
 #### B. Code explanation
 
@@ -482,13 +486,27 @@ from Main. Only the title screen is currently managed; full navigation is pendin
 `public ScreenManager(Stage stage)` assigns `this.stage = stage`. It does not
 create a second Stage or validate null; the startup caller supplies JavaFX's Stage.
 
+Phase 2.3 adds `private GameLoop gameLoop`, initially null. The constructor also
+registers a scene-property change listener and a WINDOW_HIDDEN event handler;
+both call stopGameLoop(). showMainMenu() now stops the active loop before replacing
+the scene. The title itself never starts a loop.
+
+`public void startGameLoop(DoubleConsumer update, Runnable render)` returns void.
+It stops/releases the previous loop, creates one GameLoop from the callbacks,
+and starts it. Future gameplay code must call it after installing its Scene.
+Repeated calls replace the previous timer rather than running two together.
+`public void stopGameLoop()` returns void, stops a non-null timer and clears its
+reference; repeated calls are harmless. These operations belong on the JavaFX
+Application Thread. The constructor listeners use lambdas and JavaFX property/
+event APIs. No new custom interface or game rule is introduced. See Phase 2.3
+below for the full timing and lifecycle explanation.
+
 `public void showMainMenu()` takes no parameters. It constructs MainMenuScreen,
 creates local `Scene scene` with that root and GameConfig's dimensions, sets it
 on the Stage, and calls stage.show(). A Scene contains the UI tree inside a
 Stage; it is not a game level or GameState.
 
-Repeated calls would create another title-screen Scene. There is no scene cache,
-screen collection, or call to Game.startNewGame.
+Repeated menu calls create another title Scene. There is no scene cache. Phase 2.4 showGame creates a fresh Game and calls startNewGame; the complete current API is documented below.
 
 #### C. Java concepts used
 
@@ -506,60 +524,101 @@ screen collection, or call to Game.startNewGame.
 #### A. File information
 
 Exact path: `C:\java game\src\main\java\com\shadowquest\ui\MainMenuScreen.java`.
-Declaration: `public final class MainMenuScreen extends StackPane`. It owns title
-layout and styling. Despite its name, it contains one Label and no menu buttons.
+Declaration: `public final class MainMenuScreen extends StackPane`.
+This screen owns the static Canvas title drawing and its layout. ScreenManager
+creates it as the Scene root. It reads GameConfig but does not access Game,
+Character, or Player. No buttons or gameplay are implemented.
 
 #### B. Code explanation
 
-There are no declared fields or ordinary methods. Its public no-argument
-constructor builds the screen. `Label title` is a local variable created with
-GameConfig.TITLE, not a stored field.
+| Field | Type and modifiers | Purpose |
+| --- | --- | --- |
+| BACKGROUND_COLOR | private static final Color | Shared dark fill, #171b2e |
+| TITLE_COLOR | private static final Color | Shared pale title fill, #f3e6bf |
+| TITLE_FONT | private static final Font | System bold font, size 36, matching the former CSS |
+| canvas | private final Canvas | One drawing surface per screen, initially sized from GameConfig.VIEWPORT_WIDTH and VIEWPORT_HEIGHT |
 
-| Constructor operation | Purpose |
-| --- | --- |
-| title.getStyleClass().add("game-title") | Associates the Label with its CSS rule |
-| title.setWrapText(true) | Allows wrapping when width is limited |
-| title.setAlignment(Pos.CENTER) | Centers the Label's content |
-| title.setMaxWidth(Double.MAX_VALUE) | Permits expansion across available layout width; does not set the window to that enormous size |
-| setPadding(new Insets(32)) | Adds space inside the pane edges |
-| getStyleClass().add("launch-screen") | Associates the pane with its background CSS rule |
-| getChildren().add(title) | Adds the Label to the pane; StackPane centers children by default |
-| getStylesheets().add(...) | Attaches the CSS URL to this screen |
+Static fields belong to the class. The final Canvas reference cannot be replaced,
+but its dimensions and pixels can change. The colors and font are presentation
+settings and stay in the UI class; GameConfig remains the source of initial
+window dimensions and the title string.
 
-The resource expression is
-`MainMenuScreen.class.getResource("/styles/launch.css").toExternalForm()`.
-The leading slash searches from the classpath root. Maven copies resources to
-the build output, so no personal absolute path is needed. toExternalForm converts
-the URL to the String expected by the stylesheet list.
+| Constructor/method | Parameters and return | Working and purpose |
+| --- | --- | --- |
+| public MainMenuScreen() | No parameters; constructor has no return type | Sets the pane's preferred size from GameConfig, marks Canvas unmanaged, adds it to getChildren(), and calls drawTitle() |
+| protected layoutChildren() | No parameters; void; @Override | Calls super.layoutChildren(), compares actual pane and Canvas dimensions, and resizes/redraws only when they differ |
+| private drawTitle() | No parameters; void | Reads Canvas width/height, obtains GraphicsContext, fills the background rectangle, sets font/color/alignment, and draws the title at the center |
 
-There is no missing-resource fallback. If the stylesheet is absent, getResource
-returns null and the following method call fails. The resource is currently present.
+Construction creates a 960 x 600 Canvas through the GameConfig constants.
+`canvas.setManaged(false)` excludes it from StackPane's automatic child sizing;
+MainMenuScreen sizes it explicitly in layoutChildren. It remains visible in the
+child list and stays at the default origin (0, 0). This prevents the Canvas's
+old size from controlling the pane's preferred/minimum layout size during resize.
+
+JavaFX invokes layoutChildren during layout, including window size changes.
+The override calls the superclass implementation first. If width or height has
+changed, it sets both Canvas dimensions and redraws to cover the new drawing
+area and recenter the title. There is no AnimationTimer, frame loop, input handler,
+or domain update in this callback.
+
+Inside drawTitle, local `double width` and `double height` hold the actual Canvas
+size, and local `GraphicsContext graphics` is its 2D drawing interface.
+`fillRect(0, 0, width, height)` covers the whole Canvas with the background color.
+After changing fill and font, the code sets `TextAlignment.CENTER` and
+`VPos.CENTER`. `fillText(GameConfig.TITLE, width / 2, height / 2, width)` places the
+text's horizontal center and vertical alignment center at the Canvas midpoint.
+At 960 x 600, that point is (480, 300). Both dimensions are doubles, so division
+preserves fractional coordinates. Center alignment is needed because merely
+passing half-width with the default left alignment would start the title there.
+The last width argument limits the drawn text width; JavaFX can compress long
+text into narrow space. This is a single line, not the former Label's wrapping.
+
+Canvas coordinates start at the top-left, with positive X right and positive Y
+down. These are drawing coordinates, not a new player-position system.
+The background and title are both Canvas drawing operations. launch.css is no
+longer loaded; its unchanged file remains as the historical title style resource.
+Editing that CSS will not change this Canvas screen.
 
 #### C. Java concepts used
 
-| Concept | Meaning, actual example, and reason |
+| Concept | Actual example, meaning, and reason |
 | --- | --- |
-| Inheritance | Extends StackPane and uses inherited setPadding, getChildren, and getStylesheets methods. No methods are overridden. |
-| Constructor/objects | Constructor creates a Label and Insets, then configures the inherited layout object. |
-| Framework collections | getChildren returns a node list; getStyleClass/getStylesheets return string lists. `.add(title)` and `.add("game-title")` are actual collection operations, not an implemented inventory collection. |
-| Enum use | Pos.CENTER is a JavaFX enum constant for alignment, separate from the project's Direction. |
-| Class literal/resource lookup | MainMenuScreen.class supplies the Class used to locate CSS on the classpath. This is resource loading, not save-file persistence. |
-| Final/packages/imports | Final prevents subclassing; imports name GameConfig, Insets, Pos, Label, and StackPane. |
-| JavaFX/CSS | Nodes define UI structure, while CSS controls appearance separately from domain logic. |
+| Class/object and composition | The screen owns a Canvas object; it gets the Canvas's GraphicsContext rather than creating a separate rendering service |
+| Inheritance | extends StackPane reuses a JavaFX layout node and its child collection |
+| Overriding and polymorphism | @Override layoutChildren supplies this screen's layout behavior when JavaFX invokes the inherited lifecycle contract |
+| Encapsulation/access modifiers | private canvas and drawTitle keep drawing details inside the UI; public construction remains the ScreenManager entry point; protected layoutChildren matches the framework extension point |
+| Constructor | MainMenuScreen() creates a ready-to-display screen with an initial drawing |
+| Static/final | Shared Color/Font constants and a fixed per-screen Canvas reference express stable ownership; final does not make Canvas immutable |
+| Collections/generics | getChildren().add(canvas) adds a Canvas subtype to the inherited ObservableList<Node>; no inventory collection is implied |
+| Enums | FontWeight.BOLD, TextAlignment.CENTER, and VPos.CENTER select defined JavaFX options without strings |
+| Local variables/arithmetic | double width/height and division by 2 compute the current midpoint |
+| Conditions | The size comparison avoids repainting on unchanged layout passes |
+| Separation of responsibilities | Main starts JavaFX, ScreenManager presents screens, and this class draws; domain rules remain outside JavaFX |
 
-No custom event handler, Canvas, or AnimationTimer is created in this file.
+A Canvas is a JavaFX scene-graph node containing a drawing surface.
+GraphicsContext is the object used to issue drawing commands and set drawing
+state such as fill color, font, and alignment. It is not a window or a game
+controller. Stage is the native window, Scene holds the node tree, StackPane is
+the layout root, and Canvas is its child.
+
+A Label is an ordinary control with text properties, CSS styling, wrapping, and
+accessibility behavior supplied by JavaFX. Canvas stores drawing output; its
+painted title is not a separate Label node. Changing a game value or CSS does
+not automatically repaint those pixels. Here redraw is explicit at construction
+and resize. This small static screen needs no renderer abstraction or new class;
+the reserved render package remains for future world rendering.
 
 ## Class connections and execution
 
-### Two separate paths currently exist
+### Foundation startup and domain paths
 
 ```mermaid
 flowchart TD
     A[Main.main] --> B[Application.launch]
     B --> C[JavaFX calls Main.start]
     C --> D[ScreenManager.showMainMenu]
-    D --> E[MainMenuScreen: StackPane and Label]
-    E --> F[styles/launch.css]
+    D --> E[MainMenuScreen: StackPane and Canvas]
+    E --> F[GraphicsContext draws background and title]
     D --> G[Scene assigned to Stage and shown]
     H[GameConfig] --> C
     H --> D
@@ -571,13 +630,11 @@ flowchart TD
     K --> M[Direction]
 ```
 
-The diagram deliberately has no arrow from the title screen to Game. There is
-no such call in the current code. Likewise, Direction does not receive keyboard
-events. Future input integration must connect these paths explicitly.
+This diagram shows the original startup/domain foundation. Phase 2.4 now connects these paths through ScreenManager.showGame and InputHandler; the complete current flow is in the Phase 2.4 section. Direction itself remains independent of key events.
 
 ScreenManager calls the MainMenuScreen constructor and attaches its resulting
-node to a Scene. MainMenuScreen reads the title constant and CSS. These UI classes
-do not calculate health or movement. Game creates a Player; Player delegates
+node to a Scene. MainMenuScreen reads GameConfig and draws through GraphicsContext. These UI classes
+do not calculate health or movement; ScreenManager now passes input axes to Game. Game creates a Player; Player delegates
 shared initialization and position changes to Character.
 
 ### Current transition rules
@@ -633,14 +690,14 @@ Use game.getPlayer again to obtain the new one. A returned object reference is
 not automatically redirected when the field that originally supplied it changes.
 
 Player does not know Game.state. Direct calls such as arin.move while paused
-can still move a living player. The future input/controller code must restrict
+can still move a living player. The new Game.movePlayer command restricts
 movement calls to PLAYING. This separation keeps Player independent of sessions
-and JavaFX; it is also an integration responsibility, not a completed input feature.
+and JavaFX; ScreenManager now routes movement through that gated command.
 
 ## Test files and JUnit 5
 
 Tests create domain objects and compare results with expectations. They are not
-game screens. Maven Surefire discovers the three test classes and runs JUnit.
+game screens. Maven Surefire discovers the seven test classes and runs JUnit.
 No test starts JavaFX, sleeps for animation, or requires a rendered window.
 
 ### Common JUnit concepts actually used
@@ -847,36 +904,42 @@ implemented an entire subsystem based on that concept.
 | Encapsulation | Hide fields and control access through methods | Character health/position; Game state/player; Player speed | Implemented |
 | Abstraction | Represent common behavior in a non-instantiable base | abstract Character | Implemented, with concrete shared methods |
 | Inheritance | Reuse a base class's data/operations | Player extends Character; Main extends Application; MainMenuScreen extends StackPane; TestCharacter extends Character | Implemented |
-| Method overriding | Supply a subclass implementation of an inherited method | Main.start(Stage) with @Override | Implemented in framework startup; Player has no overrides |
+| Method overriding | Supply a subclass implementation of an inherited method | Main.start(Stage) and MainMenuScreen.layoutChildren() with @Override | Implemented in framework callbacks; Player has no overrides |
 | Polymorphism | Use a subtype through a base contract and dispatch overridden behavior | JavaFX lifecycle calls Main.start; Character references hold TestCharacter | Implemented at framework/type-substitution level; no enemy behavior hierarchy yet |
 | Constructors and super | Initialize an object and its base portion | Player and TestCharacter call the Character constructor | Implemented |
 | Access modifiers | Control visibility | Public APIs, private fields, protected Character constructor/moveBy, package-private tests | Implemented |
 | Static | Member belongs to the class | Main.main, GameConfig constants, Player defaults, Character validation helper | Implemented |
 | Final | Prevent reassignment or extension/override | Configuration/stat fields; final UI classes; final moveBy | Implemented; final references do not freeze objects |
-| Enums | Restrict values to named alternatives | GameState, Direction, JavaFX Pos.CENTER | Implemented |
+| Enums | Restrict values to named alternatives | GameState, Direction, JavaFX TextAlignment.CENTER and VPos.CENTER | Implemented |
 | Packages and imports | Organize names and reference other types | com.shadowquest packages and imports across all Java files | Implemented |
 | Conditionals, switch, loops | Select or repeat behavior | Game guards; Player direction switch; PlayerTest ten-step loop | Implemented |
 | Exception validation | Reject invalid arguments | Character, Player, Game throw IllegalArgumentException; tests use assertThrows | Implemented; no application try/catch recovery workflow |
-| Collections/generics through JavaFX | Use typed lists of nodes or strings | MainMenuScreen getChildren/getStyleClass/getStylesheets and add calls | Implemented library-list usage only |
-| Lambda expressions | Supply a short operation as a value | Test calls to assertThrows | Implemented in tests, not UI handlers |
-| Functional-interface usage | Pass an implementation of a single-method contract | JUnit Executable target of test lambdas | Library usage implemented; no project-defined gameplay interface |
+| Collections/generics through JavaFX | Use typed lists of nodes or strings | MainMenuScreen getChildren().add(canvas) | Implemented library-list usage only |
+| Lambda expressions | Supply a short operation as a value | assertThrows tests and ScreenManager cleanup listeners | Implemented |
+| Functional-interface usage | Pass an implementation of a single-method contract | GameLoop DoubleConsumer update and Runnable render; JUnit Executable | Implemented using library interfaces; no custom gameplay interface |
 | Annotations | Attach compiler/framework metadata | @Override, @Test, @ParameterizedTest and input-source annotations | Implemented |
-| JavaFX scene graph | Build a hierarchy of UI nodes inside a window | Stage -> Scene -> MainMenuScreen -> Label | Implemented in source; launch remains unverified locally |
-| Classpath resource loading | Locate packaged non-Java content | MainMenuScreen loads /styles/launch.css | Implemented; not save/load file handling |
+| JavaFX scene graph | Build a hierarchy of UI nodes inside a window | Stage -> Scene -> MainMenuScreen -> Canvas | Implemented; Canvas title visually verified in Phase 2.2 |
+| Canvas drawing | Paint pixels using drawing commands | MainMenuScreen.drawTitle and GraphicsContext | Implemented for static title and movement placeholder |
+| AnimationTimer | Receive active-frame callbacks | GameLoop.handle(long now) | Implemented adapter; idle on title screen |
+| try/finally | Run cleanup even when a callback throws | GameLoop.handle resets handlingFrame in finally | Implemented; does not suppress callback exceptions |
+| Method overloading | Same method name with different parameters | Player.move(Direction, double) delegates to move(int, int, double) | Implemented |
+| EnumSet collections | Store unique values of one enum type | InputHandler pressedKeys | Implemented for input; inventory remains planned |
+| Keyboard/button events | Translate user actions into input or navigation | InputHandler filters; ScreenManager Enter; GameScreen return button | Implemented |
+| Gameplay loop wiring | Connect timing, input, domain commands, and drawing | ScreenManager.showGame update lambda and screen::render | Implemented for movement demo |
 
 ### Concepts planned for future phases
 
 | Java concept | Meaning | Intended location | Status |
 | --- | --- | --- | --- |
 | Enemy polymorphism/overriding | Different enemy types respond through a shared contract | Future Enemy subclasses | Planned; no Enemy classes exist |
-| Project-defined method overloading | Same method name with different parameter lists | Meaningful future APIs agreed by the team | Planned; current production classes do not declare overloads. Calling library overloads is not evidence of custom overload design. |
+
 | Domain collections | Store groups of items, enemies, and keys | Future Inventory, Level, progression code | Planned; do not count UI node lists as inventory |
 | Gameplay interfaces | Define shared capabilities | Proposed Attackable and Collectable | Planned; no interface source files exist |
 | File handling/persistence | Read and write saved domain state | Future persistence package | Planned; CSS lookup does not save game progress |
 | Recoverable exception handling | Catch and handle I/O or malformed-save failures | Future persistence/resource boundaries | Planned; current validation throws and tests assert those exceptions |
-| Custom event handling | React to keyboard/buttons | Future input and UI integration | Planned; the current screen has no such handlers |
-| AnimationTimer | Repeated frame callbacks on the JavaFX thread | Future loop integration | Planned; no AnimationTimer object or subclass exists |
-| Canvas rendering | Draw the game world explicitly | Future render package/GameScreen | Planned; current title uses Label and StackPane |
+
+
+| World rendering | Draw maps and entities through Canvas | Future render package | Planned; title and temporary player shape are implemented |
 
 These are planned applications of concepts, not commitments to implement them
 all in the next task. They remain subject to the project's phase approvals.
@@ -888,10 +951,9 @@ actual expressions. Avoid claiming that future game systems already work.
 
 **1. What does the project currently do?**
 
-It has JavaFX title-screen code and a tested domain foundation for state, health,
-and movement. The models are not connected to UI input yet. Local GUI launch
-was blocked by Windows policy, so our verified result is compilation and domain
-tests, not a playable game demonstration.
+It has a static title and a keyboard-controlled Canvas movement demo. The model is connected to input through ScreenManager and GameLoop. Phase 2.1 verified
+the title window, compilation, and domain tests. This is not a playable game
+demonstration.
 
 **2. Explain the architecture in about a minute.**
 
@@ -906,7 +968,7 @@ work, not completed modules.
 
 JavaFX is the team's agreed GUI framework and matches the planned Canvas renderer
 and AnimationTimer loop. Current code uses Application, Stage, Scene, StackPane,
-Label, and CSS. We have not implemented a Swing version or measured which is
+Canvas, and GraphicsContext. We have not implemented a Swing version or measured which is
 faster, so we should not claim a performance comparison.
 
 **4. Why use Maven and the wrapper?**
@@ -931,9 +993,8 @@ session is not itself a character.
 
 **7. Where are overriding and overloading demonstrated?**
 
-Main overrides Application.start. Player does not override its inherited methods.
-The production classes do not declare overloaded methods. JUnit/JavaFX library
-overloads are used by calls, but custom method overloading remains planned.
+Main overrides Application.start; MainMenuScreen overrides layoutChildren. Player does not override its inherited methods.
+Player now overloads move: the Direction form delegates to the (int, int, double) form, so both APIs share validation and movement arithmetic.
 
 **8. Why use Direction and GameState enums?**
 
@@ -975,7 +1036,7 @@ refer to a window whose scene changes. Final is not general object immutability.
 
 Assertions make expected behavior executable: the build fails if a result changes
 unexpectedly. Parameterized tests run one method for multiple inputs. There are
-35 test methods and 63 executions, including four separate direction cases.
+59 test methods and 120 executions, including the new parameterized input/movement cases.
 
 **15. Why test NaN, infinity, and huge values?**
 
@@ -985,24 +1046,39 @@ invalid. Tests check both rejection and preservation of the previous state.
 
 **16. Where is file handling? Where are collections?**
 
-CSS is loaded from the classpath, but save/load file handling is not implemented.
+The former screen loaded CSS from the classpath. The Canvas screen no longer loads it; save/load file handling is still not implemented.
 MainMenuScreen uses JavaFX lists for children/styles. Inventory lists, enemy
 collections, and key sets are still planned.
 
 **17. Is VICTORY implemented? What about Canvas and AnimationTimer?**
 
-VICTORY is an enum constant without a transition trigger. Canvas and AnimationTimer
-are architectural choices for later rendering/loop work; neither is instantiated
-by current code. There are no enemies, inventory, levels, or save/load yet.
+VICTORY is an enum constant without a transition trigger. Canvas now draws the
+static title through GraphicsContext. GameLoop now extends AnimationTimer; gameplay movement callbacks are now wired through ScreenManager. There are no enemies, inventory, levels, or save/load yet.
 
 **18. What is the difference between compilation and successful GUI launch?**
 
 Compilation checks Java source and types. Tests verify the exercised domain
 behavior. A GUI launch additionally needs permitted native libraries and a
-graphical environment. Windows blocked JavaFX native loading locally, so passing
-63 tests does not prove the UI opened.
+graphical environment. Passing 63 tests alone does not prove the UI opened.
+Phase 2.1 separately observed the actual title window and its normal close.
 
 ## Current verification
+
+Latest Phase 2.4: clean compilation and all 120 tests passed. The actual title
+and gameplay entry were inspected; the user confirmed held movement and release.
+Further GUI checks were interrupted by Escape stopping Computer Use. The Maven application subsequently exited successfully with code 0. Focus-loss clearing and return/re-entry remain manually unverified in that run.
+See Phase 2.4 for the full file-wise implementation and evidence.
+
+Previous Phase 2.3 results: clean compilation and 69 JUnit tests passed. The separate
+JavaFX loop lifecycle smoke check passed. The actual Maven application window was
+visually inspected; final close verification was interrupted by the user stopping
+Computer Use. See the Phase 2.3 record for the exact scope and limitations.
+
+Previous status: Phase 2.2 passed clean compilation and all 63 tests, visually
+verified the Canvas title window at normal and maximized sizes, and completed
+javafx:run with exit code 0 after normal close. See the dated Phase 2.2 section
+below for commands and runtime evidence.
+The following paragraphs preserve the earlier documentation-revision checks.
 
 For this documentation revision, every production/test Java file and pom.xml,
 resources, and supporting documentation were inspected. Only this report is
@@ -1031,8 +1107,8 @@ commands remain the general entry point; do not use offline mode on a first buil
 | Total | 35 | 63 | 0 | 0 | 0 |
 
 Maven reported BUILD SUCCESS. Current evidence is in target/surefire-reports.
-No tests were edited, deleted, disabled, or weakened. GUI launch was not retried;
-the previously observed Windows Application Control blocker remains unresolved.
+No tests were edited, deleted, disabled, or weakened. At that earlier revision,
+GUI launch was not retried and the previous blocker remained unresolved.
 Visual layout, native-library startup, and future UI/domain integration are not
 covered by these tests.
 
@@ -1281,10 +1357,10 @@ empty remote before publishing. The current branch is main and origin points to
 that repository. The initial commit is recorded in the timeline above. The
 unverified GUI launch remains disclosed; publishing source did not resolve it.
 
-## Team integration and pending work
+## Historical team integration and pending work
 
-Pending features include UI/controller wiring, keyboard input, Canvas rendering,
-game loop, collision and level bounds, enemies, combat, inventory, collection,
+Pending features include UI/controller wiring, keyboard input, Canvas world rendering,
+gameplay-loop wiring, collision and level bounds, enemies, combat, inventory, collection,
 four levels, progression, victory rules, pause/game-over/victory screens, sound,
 and persistence. No next gameplay phase was started by this audit.
 
@@ -1294,6 +1370,752 @@ owns inventory/items. Member 5 owns levels/progression/persistence. Confirm deta
 core ownership with the team. Coordinate changes to units, health rules, state
 transitions, nullability, and API signatures across affected owners. Keep domain
 code independent of JavaFX and renderers free of gameplay mutations.
+
+## Phase 2.1: JavaFX launch verification and diagnosis
+
+Verified November 13, 2026. The actual title window opened, displayed the dark
+background and centered pale title, and closed normally using Alt+F4. The Maven
+launch then reported BUILD SUCCESS and exit code 0 at 22:49:29 IST. The earlier
+Application Control error did not recur in this successful run. No Windows
+security setting, policy, DLL name, or DLL location was changed by this work.
+We have not established why the historical policy error stopped occurring.
+Success on this run does not establish that every native library or renderer
+is allowed, or that the application will run on every team member's machine.
+
+### Files inspected and changed
+
+The launch inspection covered these existing files without modifying them:
+
+- `pom.xml`: release 21, JavaFX controls 21.0.13, and JavaFX Maven plugin 0.0.8
+  with main class `com.shadowquest.app.Main`.
+- `src/main/java/com/shadowquest/app/Main.java`: Application lifecycle entry.
+- `src/main/java/com/shadowquest/core/GameConfig.java`: title and 960 x 600 scene.
+- `src/main/java/com/shadowquest/ui/ScreenManager.java`: Scene creation/show.
+- `src/main/java/com/shadowquest/ui/MainMenuScreen.java`: title and CSS loading.
+- `src/main/resources/styles/launch.css`: background and title styles.
+- `.mvn/wrapper/maven-wrapper.properties` and the Windows wrapper execution:
+  wrapper 3.3.4, Maven 3.9.11, existing HTTPS distribution.
+- `docs/INITIALIZATION.md` and this report: previous launch evidence and status.
+
+Only `docs/PROJECT_DEVELOPMENT_REPORT.md` was changed among project files. It
+records this investigation and updates current launch claims while preserving
+historical failures. No configuration defect requiring a code or POM edit was
+found. Source, architecture, tests, dependencies, and wrapper files are unchanged.
+No commit or push was made during Phase 2.1.
+
+### Environment, commands, and results
+
+The default `java -version` resolved to the Oracle javapath shortcut and returned
+exit code -1073740791 without version output. The first default wrapper invocation
+could not create the user-profile `.m2` directory under the session's filesystem
+restriction. Neither failure is evidence of a Java compilation defect.
+
+Using the existing local JDK and Maven cache, with environment variables set only
+for the command process, produced Microsoft OpenJDK 21.0.13.0.2+1, Maven 3.9.11,
+Windows 11, and amd64. System PATH and persistent JAVA_HOME were not changed.
+
+```powershell
+$env:JAVA_HOME = (Resolve-Path '.tools/jdk21/jdk-21.0.13.0.2+1').Path
+$env:Path = "$env:JAVA_HOME\bin;$env:Path"
+$env:MAVEN_USER_HOME = (Resolve-Path '.tools').Path + '\maven-user-home'
+java -version
+.\mvnw.cmd -version
+& "$env:JAVA_HOME/bin/jar.exe" tf .tools/repository/org/openjfx/javafx-graphics/21.0.13/javafx-graphics-21.0.13-win.jar
+.\mvnw.cmd -o -B -ntp '-Dmaven.repo.local=.tools/repository' clean test
+.\mvnw.cmd -o -B -ntp '-Dmaven.repo.local=.tools/repository' javafx:run
+```
+
+Offline mode used existing dependencies. No DLLs or new dependencies were
+downloaded. The local repository contains JavaFX base, graphics, and controls
+21.0.13, including Windows classifier JARs. Inspection of the graphics JAR
+confirmed native entries including glass.dll, prism_d3d.dll, prism_sw.dll,
+prism_common.dll, javafx_font.dll, and javafx_iio.dll. The launch successfully
+resolved the JavaFX plugin. The built CSS exists at target/classes/styles/launch.css.
+
+Clean test completed at 22:43:13 IST with exit code 0, compiling nine production
+and three test Java files. Surefire XML confirms:
+
+| Test class | Executions | Failures | Errors | Skipped |
+| --- | ---: | ---: | ---: | ---: |
+| GameTest | 14 | 0 | 0 | 0 |
+| CharacterTest | 29 | 0 | 0 | 0 |
+| PlayerTest | 20 | 0 | 0 | 0 |
+| Total | 63 | 0 | 0 | 0 |
+
+### Runtime diagnosis and evidence
+
+The first launch reached JavaFX toolkit startup, then failed with exit code 1.
+Its first concrete error was a denied write to the normal native-cache lock:
+
+```text
+Loading library glass from resource failed: java.io.IOException:
+Error copying library ...\glass.dll to cache: ...\.lock (Access is denied)
+Caused by: java.io.FileNotFoundException: ...\.lock (Access is denied)
+Caused by: java.lang.UnsatisfiedLinkError: no glass in java.library.path
+```
+
+The cache path was `%USERPROFILE%\.openjfx\cache\21.0.13+2\amd64`.
+This error differs from the historical explicit Application Control message.
+The DLL is present in the dependency JAR; the loader could not complete its
+normal cache operation under the agent's restricted filesystem access.
+
+The same Maven launch command was retried with approved normal user-profile
+filesystem access. This permits the application's ordinary cache operation;
+it does not disable or alter Windows Application Control. The retry opened a
+window named `Shadow Quest: The Lost Realm` belonging to the local JDK's java.exe.
+A screenshot inspection confirmed the actual title and CSS appearance. After
+normal close, no matching window remained and Maven exited successfully.
+
+Evidence therefore supports a session cache-access failure for the first run,
+followed by successful native loading and graphics initialization on the retry.
+There was no observed Maven dependency-resolution failure or current application
+configuration defect. No forced graphics backend, renamed DLL, cache relocation,
+policy modification, or unofficial native library was used.
+
+Complete stdout/stderr, including the first failure's stack traces, is retained
+locally under ignored `.tools/phase2.1/`:
+
+- `java-version.log` and `maven-version.log`: selected tool versions.
+- `clean-test.log`: complete clean compilation and test output.
+- `javafx-run.log`: complete restricted-launch failure output.
+- `javafx-run-normal-access.log`: successful retry through normal window close.
+
+Logs are local diagnostic artifacts, not proposed source commits. The complete
+error log contains machine-specific paths; this report quotes only relevant
+errors. Git ignore verification confirmed the diagnostic directory is excluded.
+
+### Java concepts and integration notes
+
+No new Java concept was implemented. This verification exercised Main's
+inheritance from Application and overridden start(Stage), construction of Scene
+and MainMenuScreen, composition of the scene graph, static final configuration,
+and classpath CSS resource loading. JavaFX additionally loads Windows native
+libraries at runtime. Java compilation and domain tests do not exercise that
+entire native startup path, which explains why they can pass while launch fails.
+
+An UnsatisfiedLinkError reports a native linking problem. Reading the earlier
+cause matters: here the denied cache lock preceded the final missing-library
+message. Adding application try/catch code would not correct that filesystem
+restriction and was not warranted.
+
+Phase 2.1 launch verification is complete for this machine with the documented
+JDK and normal cache access. Default-shell Java selection still needs attention
+when launching outside this setup. Resizing, other machines, other rendering
+backends, and gameplay remain outside this verification. The exact next step
+is team review of this result and authorization of the next phase. Teammates
+should confirm the same title screen with their JDK 21 setup. If an explicit
+Application Control error recurs, stop and give the log to the device's IT or
+administrator for an authorized review, or use a permitted development machine.
+Do not work around the policy. No Canvas, AnimationTimer, input, or gameplay
+work was started.
+
+## Phase 2.2: Static Canvas title screen
+
+Completed November 13, 2026. This phase replaces the title Label with Canvas
+drawing while keeping the existing startup and screen-management flow. The dark
+background, pale centered title, System bold font at size 36, and initial
+GameConfig dimensions are preserved. No new Java files or dependencies were
+needed. The earlier Phase 2.1 documentation changes remain in this report.
+
+### Exact file changes and design
+
+| File | Change and reason |
+| --- | --- |
+| src/main/java/com/shadowquest/ui/MainMenuScreen.java | Replaced Label/CSS setup with a private Canvas, drawing constants, drawTitle(), and a layoutChildren() override to repaint after resizing |
+| docs/PROJECT_DEVELOPMENT_REPORT.md | Updated the class explanation, current flow, concepts and viva answers; preserved history and added this dated verification record |
+
+The complete current MainMenuScreen explanation above documents its exact local
+path, every field, constructor, methods, and Java concepts. Main.java remains
+the Application entry point. ScreenManager still creates the Scene, assigns it
+to the Stage, and shows it. GameConfig is unchanged and supplies title/initial
+dimensions. Game, Character, Player, all test files, and pom.xml are unchanged.
+
+The inspected launch.css is intentionally retained unchanged as the historical
+style resource. MainMenuScreen no longer loads it because GraphicsContext sets
+the drawing colors and font directly. The Canvas background is filled explicitly;
+it is not a CSS background behind an otherwise transparent drawing.
+
+This implementation keeps menu drawing in the existing UI class. Creating a
+GameRenderer for one static title would add an unnecessary class; world rendering
+still belongs to the planned render package. The screen has no Game reference
+and cannot move the player or mutate health while drawing.
+
+### How to explain it in a viva
+
+1. Main.launch starts JavaFX, which calls Main.start(Stage).
+2. Main delegates to ScreenManager.showMainMenu(), which creates MainMenuScreen
+   inside a Scene at the GameConfig dimensions and shows the Stage.
+3. MainMenuScreen owns a Canvas and calls drawTitle(). That method obtains its
+   GraphicsContext, fills the complete background, then draws the title.
+4. The midpoint is (width / 2, height / 2), initially (480, 300).
+   TextAlignment.CENTER and VPos.CENTER make that point the text alignment center.
+5. JavaFX calls the overridden layoutChildren() on layout changes. The screen
+   resizes its unmanaged Canvas and repaints when dimensions change. This is a
+   layout callback, not an AnimationTimer or continuous gameplay update.
+
+Canvas is a drawing node; GraphicsContext issues drawing commands. Ordinary
+controls such as Label provide text layout, CSS, and accessibility properties.
+The painted title has no separate control node. This change demonstrates object
+composition, encapsulation, inheritance, method overriding, framework
+polymorphism, static/final fields, enum options, typed child collections, and
+double arithmetic. It adds no project-defined interface or method overload.
+Calling fillText's library overload does not mean this project defines one.
+
+### Commands and observed verification
+
+Used the documented Microsoft OpenJDK 21.0.13.0.2+1 and Maven 3.9.11 setup;
+the default Oracle shortcut was not used. JavaFX remains 21.0.13.
+
+```powershell
+$env:JAVA_HOME = (Resolve-Path '.tools/jdk21/jdk-21.0.13.0.2+1').Path
+$env:Path = "$env:JAVA_HOME\bin;$env:Path"
+$env:MAVEN_USER_HOME = (Resolve-Path '.tools').Path + '\maven-user-home'
+.\mvnw.cmd -o -B -ntp '-Dmaven.repo.local=.tools/repository' clean compile test
+.\mvnw.cmd -o -B -ntp '-Dmaven.repo.local=.tools/repository' javafx:run
+```
+
+Clean compilation and tests passed at 23:09:34 IST, exit code 0. Maven compiled
+nine production and three test files. All 63 existing executions passed:
+GameTest 14, CharacterTest 29, PlayerTest 20; zero failures, errors, or skipped
+tests. No tests were changed or removed. Domain tests do not verify pixels;
+the UI check was manual through the actual running JavaFX window.
+
+The launch used approved normal user-profile cache access as established in
+Phase 2.1. Visual inspection confirmed the dark Canvas background and centered,
+readable title at the configured initial size. Maximizing the window confirmed
+that the background filled the enlarged area and the title remained centered.
+Alt+F4 closed the window normally. The window disappeared and Maven reported
+BUILD SUCCESS with exit code 0 at 23:16:35 IST. No runtime error appeared.
+No Windows security settings, native libraries, or policies were modified.
+
+Full local command output is retained in ignored
+`.tools/phase2.2/clean-test.log` and `.tools/phase2.2/javafx-run.log`.
+Git diff whitespace verification passed. No commit or push was performed.
+
+### Limitations and integration boundary
+
+This is a static title, not a playable screen. Canvas text stays on one line and
+uses the available width as its maximum; narrow windows can compress the text
+instead of wrapping it. Its text is not exposed as a Label control, though the
+native window title is unchanged. Automated image comparison, narrow-window
+readability, and other monitors/platforms were not verified in this phase.
+
+There is no frame loop, AnimationTimer, input handler, sprite, enemy, level,
+collision, combat, or inventory UI. Existing domain movement methods remain
+untouched and disconnected from the screen. Repainting changes no game state.
+Future dynamic drawing must remain separate from domain updates. Phase 2.3
+requires a separate authorized scope; this work stops at Phase 2.2.
+
+## Phase 2.3: AnimationTimer game-loop foundation
+
+Implemented November 13, 2026. Phase 2.1 and 2.2 working changes were preserved.
+The title screen still draws only at construction and resize. It creates no
+active GameLoop. ScreenManager now owns the lifecycle entry points that a future
+gameplay screen can use. A separate JavaFX smoke application exercised those
+entry points and actual frame callbacks without adding gameplay to Main.
+
+### What a game loop does
+
+A game loop repeatedly updates state and then renders the result. Updating means
+applying rules to the model; rendering means reading state and drawing it. They
+are separate callbacks here, so drawing never has to contain health, movement,
+or combat rules. No gameplay callback is wired in the normal application yet.
+
+GameLoop extends JavaFX AnimationTimer and overrides `handle(long now)`. JavaFX
+calls it for frames while the timer is active. `now` is a frame timestamp in
+nanoseconds, not a calendar date or a frame count. Subtract the previous frame's
+timestamp to get elapsed time, then divide by 1,000,000,000.0 for seconds.
+For example, 16,000,000 nanoseconds becomes 0.016 seconds. Seconds match Game's
+existing update contract and future speed-per-second calculations. Frame spacing
+is not assumed to be exactly 1/60 second. The timer does not promise a fixed FPS.
+See the [official JavaFX 21 AnimationTimer documentation](https://openjfx.io/javadoc/21/javafx.graphics/javafx/animation/AnimationTimer.html).
+
+There is no previous sample on the first frame. Using zero as a timestamp would
+incorrectly count time since an arbitrary clock origin. FrameClock instead records
+the first sample and returns delta 0. Both update and render run for that frame,
+but update receives zero elapsed time. Restart resets this sampling state, so a
+long stopped interval does not become the next update's delta.
+
+### FrameClock.java
+
+Exact path: `C:\java game\src\main\java\com\shadowquest\core\FrameClock.java`.
+This public final class is a Java-only timing helper. It exists to isolate and
+test conversion/reset rules without starting JavaFX or waiting for real time.
+It has an implicit public no-argument constructor and no JavaFX imports.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| previousTime | private long | Last accepted frame timestamp in nanoseconds |
+| hasPreviousTime | private boolean | Whether a previous sample exists; avoids treating timestamp zero as a special value |
+
+`public double tick(long now)` returns seconds. On the first call it stores now,
+marks the sample present, and returns 0. Later it calculates `now - previousTime`,
+rejects negative elapsed time with IllegalArgumentException before changing the
+stored sample, stores now, and divides by `1_000_000_000.0`. Equal timestamps
+produce zero. Timestamp origins may be negative. The contract expects consecutive
+frame intervals representable as nonnegative long nanoseconds; arbitrary values
+spanning more than roughly 292 years are outside a frame clock's use.
+
+`public void reset()` has no parameters and returns void. It clears the boolean;
+the next tick overwrites the old timestamp. Clearing previousTime is unnecessary
+because it is never used until a new sample exists.
+
+Java concepts: encapsulation through private state, primitive long/boolean/double,
+conditional branches, floating-point division, a public API with validation, and
+a final class. The helper has no thread synchronization; its owner uses it on the
+JavaFX thread. Large but valid active-frame gaps are reported honestly, not clamped;
+pause/simulation policies belong to a later gameplay phase.
+
+### GameLoop.java
+
+Exact path: `C:\java game\src\main\java\com\shadowquest\core\GameLoop.java`.
+This public final class extends AnimationTimer. The architecture assigns loop
+coordination to core. JavaFX code is isolated here; Game, Character, and Player
+remain unchanged and independent of JavaFX.
+
+| Field | Type | Responsibility |
+| --- | --- | --- |
+| clock | private final FrameClock | Owns previous-frame sampling |
+| update | private final DoubleConsumer | Receives elapsed seconds through accept(double) |
+| render | private final Runnable | Draws through run(), with no parameters |
+| running | private boolean | Tracks whether this timer should process frames |
+| handlingFrame | private boolean | Rejects re-entry while a callback is already being processed |
+
+`public GameLoop(DoubleConsumer update, Runnable render)` stores two required
+callbacks, checking them with Objects.requireNonNull. These are existing JDK
+functional interfaces, not new project abstractions. A future caller can pass
+`game::update` and a renderer method reference, but neither is installed in the
+normal title-screen flow in this phase.
+
+| Method | Parameters/return | Behavior |
+| --- | --- | --- |
+| public start() | none; void; override | Requires JavaFX thread; if stopped, resets clock, calls super.start(), and marks running; repeated start leaves the active clock intact |
+| public stop() | none; void; override | Requires JavaFX thread; calls super.stop(), clears running, resets clock; repeated stop is safe |
+| public handle(long now) | frame nanoseconds; void; override | Ignores inactive or nested calls; samples clock, invokes update, then render if still running |
+| public isRunning() | none; boolean | Reports lifecycle state for inspection on the JavaFX thread |
+| private static requireFxThread() | none; void | Uses Platform.isFxApplicationThread(); throws IllegalStateException on an incorrect lifecycle caller |
+
+handle uses try/finally to release handlingFrame even when a callback throws.
+It does not catch or suppress the callback error. If update navigates away and
+stops the loop, render is skipped. Native window changes can cause a nested
+JavaFX pulse, so the guard prevents a recursive update/render chain. This is
+single-thread re-entry protection, not multithread synchronization.
+
+Java concepts include inheritance from an abstract framework class, overriding,
+polymorphic framework callbacks, composition with FrameClock, encapsulation,
+final references, JDK functional interfaces, null validation, and try/finally.
+There is no custom thread, sleep, physics, input, or movement in this adapter.
+
+### ScreenManager.java changes and connections
+
+Exact path: `C:\java game\src\main\java\com\shadowquest\ui\ScreenManager.java`.
+Its updated file-by-file explanation above describes stage, gameLoop, constructor,
+showMainMenu, startGameLoop, and stopGameLoop. This remains the screen presenter;
+it now also prevents a previous screen's timer from surviving a transition.
+No timer is constructed until startGameLoop is requested.
+
+```text
+Normal launch:
+Main -> ScreenManager.showMainMenu -> MainMenuScreen -> static Canvas
+                          active loop: none
+
+Available future gameplay integration:
+install gameplay Scene -> ScreenManager.startGameLoop(update, render)
+  -> GameLoop.start -> JavaFX handle(now) -> FrameClock.tick(now)
+  -> update.accept(deltaSeconds) -> render.run()
+
+return to menu / replace Scene / hide or close Stage
+  -> ScreenManager.stopGameLoop -> timer.stop -> release timer reference
+```
+
+startGameLoop always stops the previous owned timer before constructing another.
+It prevents simultaneous loops owned by this ScreenManager, not arbitrary timers
+created elsewhere. Future screens must use this owner instead of starting their
+own timers. Root-only replacement inside the same Scene is not a scene-property
+change: a future such navigation path must explicitly call stopGameLoop first.
+Main and MainMenuScreen needed no Phase 2.3 edits. Their prior behavior is preserved.
+
+### FrameClockTest.java
+
+Exact path: `C:\java game\src\test\java\com\shadowquest\core\FrameClockTest.java`.
+This package-private JUnit class has no fields or explicit constructor. Each
+no-argument void test creates its own clock. It uses @Test and static assertion
+imports; assertThrows receives a lambda. Inputs are fixed timestamps, not sleeps
+or assumptions about real frame frequency.
+
+| Test method | What it proves |
+| --- | --- |
+| firstFrameUsesZeroInsteadOfTimeSinceClockOrigin | Large initial timestamp still yields zero |
+| convertsNanosecondsToFractionalSeconds | Consecutive 16 ms and 25 ms gaps become 0.016 and 0.025 seconds |
+| equalTimestampsProduceZero | Zero is a valid first timestamp and repeated samples yield zero |
+| resetExcludesTimeSpentStopped | Repeated reset is harmless; restart has zero delta then resumes normal conversion |
+| rejectsBackwardTimeWithoutChangingPreviousTimestamp | Invalid time throws without corrupting the next valid interval |
+| timestampsMayHaveNegativeOrigins | Negative clock origins are accepted and elapsed time remains correct |
+
+### Files and verification
+
+New project files: core/FrameClock.java, core/GameLoop.java, and
+test core/FrameClockTest.java at the exact paths above. Modified this phase:
+ui/ScreenManager.java and docs/PROJECT_DEVELOPMENT_REPORT.md. The pre-existing
+MainMenuScreen.java working change belongs to Phase 2.2 and was preserved.
+No source dependencies, existing tests, game rules, or planning documents changed.
+
+Using the documented JDK 21 and local Maven setup:
+
+```powershell
+$env:JAVA_HOME = (Resolve-Path '.tools/jdk21/jdk-21.0.13.0.2+1').Path
+$env:Path = "$env:JAVA_HOME\bin;$env:Path"
+$env:MAVEN_USER_HOME = (Resolve-Path '.tools').Path + '\maven-user-home'
+.\mvnw.cmd -o -B -ntp '-Dmaven.repo.local=.tools/repository' clean compile test
+.\mvnw.cmd -o -B -ntp '-Dmaven.repo.local=.tools/repository' javafx:run
+```
+
+The final clean build after the re-entry guard passed at 23:45:39 IST. Eleven
+production files and four test files compiled. All 69 JUnit executions passed,
+with zero failures, errors, or skipped tests: original GameTest 14, CharacterTest
+29, PlayerTest 20, plus FrameClockTest 6. Existing 63 tests were unchanged.
+
+A local, ignored `.tools/phase2.3/LoopSmoke.java` was compiled with javac using
+the existing JavaFX Windows JARs as module path and target/classes as classpath,
+then executed with java. It passed these checks with exit code 0:
+
+- Repeated start/stop, stopped-frame suppression, restart with zero delta.
+- Update-before-render order and no render after update stops its loop.
+- Explicit nested-frame guard and deterministic adapter delta conversion.
+- Actual AnimationTimer pulses, replacement of an active owned loop, and cleanup
+  after scene replacement, return to the menu, and Stage.close().
+
+The first smoke attempt used Java source-file launching, whose class loader did
+not resolve the Application subclass through launch(args). Compiling the helper
+first fixed that verification-tool problem. The next attempt exposed nested
+pulses in the smoke driver while replacing scenes. The driver received its own
+re-entry guard, and GameLoop received the small handlingFrame guard to protect
+callbacks that may navigate. The corrected smoke check passed. These were
+investigated failures, not ignored passing results.
+
+The normal Maven application was also launched with approved native-cache access.
+The actual title window was brought forward and inspected: the Canvas background
+and centered title matched the previous phase. Computer Use was then stopped by
+the user with the physical Escape key during close verification. No further GUI
+interaction was performed. Normal closure and final Maven exit for that launch
+are therefore not claimed; the process was still running at the last check.
+The separate lifecycle smoke check did verify Stage.close() cleanup successfully.
+
+Logs and the smoke helper remain under ignored `.tools/phase2.3/`, including
+clean-test.log, loop-smoke.log, loop-smoke-initial-failure.log, and javafx-run.log.
+No Windows security policy was changed. No commit or push was made.
+
+### Remaining scope and viva answers
+
+The loop foundation is implemented and tested, but a gameplay screen and real
+update/render callback wiring remain planned. The static menu deliberately has
+no continuous loop. Window hiding stops a loop; minimizing is not implemented
+as a game pause rule. Fixed-step simulation, delta clamping, and callback-error
+recovery policy are not introduced. Existing domain movement remains unchanged
+and has no keyboard or loop integration.
+
+Why two classes? FrameClock is pure timing arithmetic that JUnit can test without
+a GUI; GameLoop adapts it to JavaFX. Why callbacks? They separate scheduling from
+rules and drawing using standard Java interfaces. Why first delta zero? There
+is no previous sample yet. Why reset on restart? Time spent stopped must not be
+simulated as one frame. Why stop on navigation? Otherwise an old screen could
+continue receiving updates after leaving it. Why no timer on the menu? Static
+pixels do not need repeated updates. No keyboard, sprites, animation, combat,
+collision, or next-phase gameplay work was started.
+
+## Phase 2.4: Keyboard input and player movement
+
+Implemented November 14, 2026. This phase connects the existing input-free domain
+model to the running JavaFX game loop. Earlier working changes and all historical
+phase records remain. The user now handles all coding, architecture, and
+integration; earlier team assignments are historical. The dated revisions in
+PROJECT_PLAN.md and ARCHITECTURE.md preserve the complete newer story, portal
+progression, systems blueprint, and Phase 0–12 roadmap without creating future
+classes. No commit, push, merge, or remote-branch change was performed.
+
+### Current behavior and architecture
+
+The initial title Canvas keeps its previous appearance and has no timer. Press
+Enter to enter the movement demo. Hold WASD or arrow keys, including diagonals;
+release to stop. Opposite directions cancel. A Back to title button leaves the
+demo; entering again creates a fresh Game and Player. Space, E, and Esc are
+tracked as future action inputs only, with no combat, interaction, or pause action.
+
+```text
+Main -> ScreenManager.showMainMenu -> static MainMenuScreen
+  Enter -> showGame -> Game.startNewGame + GameScreen + InputHandler
+  Scene key filters -> EnumSet of held keys -> horizontal/vertical axes
+  GameLoop / FrameClock -> elapsed seconds
+    update callback: Game.update -> Game.movePlayer -> Player.move -> Character.moveBy
+    render callback: GameScreen.render -> Canvas circle
+  Scene replacement / window hidden / return button -> leaveGame
+    -> stopGameLoop + InputHandler.detach + clear keys
+  Window focus lost -> clear keys
+```
+
+Input decides requested direction, Player owns displacement, Game gates movement
+by session state, and GameScreen draws without changing domain state. ScreenManager
+only connects these operations and owns navigation/lifecycle. Existing app,
+player, render, and utils packages are retained instead of migrating to the
+blueprint's root Main, entities, rendering, and utilities names. This avoids
+duplicate classes and preserves the working architecture.
+
+### InputHandler.java
+
+Exact path: `C:\java game\src\main\java\com\shadowquest\input\InputHandler.java`.
+Public final InputHandler translates held JavaFX keys into digital axes. It has
+an implicit public no-argument constructor and no Game or Player reference.
+
+| Field | Type | Purpose |
+| --- | --- | --- |
+| pressedKeys | private final EnumSet<KeyCode> | Stores each held supported key once, preventing key-repeat duplicates |
+| pressedHandler | private final EventHandler<KeyEvent> | Stored lambda adds supported pressed keys and consumes those events |
+| releasedHandler | private final EventHandler<KeyEvent> | Stored lambda removes supported released keys and consumes those events |
+| scene | private Scene | Current event source, null when detached |
+
+| Method | Parameters and return | Logic |
+| --- | --- | --- |
+| attach | Scene scene / public void | Requires non-null; detaches previous filters, stores Scene, and adds pressed/released event filters |
+| detach | none / public void | Removes the same handler objects from the attached Scene, clears the reference and all keys; repeated calls are safe |
+| press | KeyCode key / public void | Requires non-null, ignores unsupported keys, adds supported key to the set |
+| release | KeyCode key / public void | Requires non-null, removes it if present; repeated release is harmless |
+| isPressed | KeyCode key / public boolean | Requires non-null and checks set membership without exposing the mutable set |
+| getHorizontal | none / public int | (D or Right) minus (A or Left), returning -1, 0, or 1 |
+| getVertical | none / public int | (S or Down) minus (W or Up), returning -1, 0, or 1 |
+| clear | none / public void | Removes all held keys, including future actions |
+| isSupported | KeyCode key / private static boolean | Switch expression recognizes WASD, arrows, Space, E, Escape |
+
+For example W+D yields (1,-1). Holding D+Right still yields (1,0), not (2,0).
+W+Down yields zero vertical input; releasing Down leaves W active. Releasing W
+from W+D stops vertical motion but keeps rightward motion. Keys change state
+through events; every game frame samples that state. Movement is not executed
+inside a key event and does not depend on the OS key-repeat rate.
+
+This file demonstrates encapsulation, enum collections, generics, final handler
+references, lambdas, boolean expressions, a switch expression, and event filters.
+Storing handlers matters because detach must remove the original objects. This
+is an input-boundary JavaFX dependency; domain classes remain JavaFX-free.
+Space/E/Escape currently expose held state, not one-shot action edges. Future
+combat/interactions must add deliberate edge/cooldown behavior when authorized.
+
+### Player.java modification
+
+Exact path: `C:\java game\src\main\java\com\shadowquest\player\Player.java`.
+Existing constructor, constants, speed field, and getters are unchanged. Position
+and health remain private in Character. The existing
+`public void move(Direction direction, double deltaTime)` still rejects null
+and handles all four original directions; its switch now delegates to
+`public void move(int horizontal, int vertical, double deltaTime)`.
+
+The new overload validates axes in [-1,1], finite nonnegative time, and finite
+`distance = speed * deltaTime`. Validation happens even for no input or a dead
+player. A dead player or (0,0) request returns without movement. Otherwise it
+computes local `double length = Math.hypot(horizontal, vertical)` and calls
+`moveBy(horizontal / length * distance, vertical / length * distance)`.
+The existing Character method validates both resulting positions before mutation.
+
+For (1,1), length is sqrt(2). Each normalized component is approximately 0.7071.
+At 200 units/second for 0.25 seconds, each coordinate changes by about 35.3553;
+the total diagonal distance is 50, the same as horizontal movement. Without
+normalization it would be about 70.71. For (0,0), the early return prevents
+division by zero. No coordinate setter, second speed, or second movement engine
+was added. Direction remains a four-value enum for compatibility.
+
+Java concepts: meaningful method overloading, delegation, inherited protected
+moveBy, encapsulation, validation, arithmetic, and the existing enum switch.
+Player does not know KeyCode, GameLoop, Canvas, or GameState. No collision or
+level bounds are applied. The two overloads share all displacement arithmetic.
+
+### Game.java modification
+
+Exact path: `C:\java game\src\main\java\com\shadowquest\core\Game.java`.
+Existing fields, implicit constructor, transitions, getters, and update(double)
+remain unchanged. New `public void movePlayer(int horizontal, int vertical,
+double deltaTime)` returns void and delegates to Player.move only when state is
+PLAYING. Other states ignore the command without validating movement arguments.
+This follows the existing normal-no-op command policy. While playing, Player
+validates inputs and refuses movement if dead. Game.update is called first each
+frame, so defeat is observed before the movement request.
+
+The new method demonstrates delegation and an enum guard. The rule belongs here
+because Player can exist outside a session and must not know session pause state.
+GameMovementTest verifies menu, playing, paused, resumed, dead, and game-over
+cases. No JavaFX import or new field was introduced.
+
+### GameScreen.java
+
+Exact path: `C:\java game\src\main\java\com\shadowquest\ui\GameScreen.java`.
+Public final GameScreen extends StackPane. It displays the temporary player and
+return button, not a complete level, camera, renderer hierarchy, or HUD.
+
+| Field | Type | Purpose |
+| --- | --- | --- |
+| PLAYER_RADIUS | private static final double, 12 | Radius of temporary player circle |
+| BACKGROUND_COLOR | private static final Color | Dark #171b2e background |
+| PLAYER_COLOR | private static final Color | Pale #f3e6bf placeholder and help text |
+| player | private final Player | Read-only use of the Player reference supplied by ScreenManager |
+| canvas | private final Canvas | Drawing surface initialized from GameConfig dimensions |
+
+`public GameScreen(Player player, Runnable returnToTitle)` validates both
+references. It sets preferred dimensions and focus traversal, marks Canvas
+unmanaged so this pane can size it, creates local Button back and Label controls,
+and groups them in local HBox toolbar with spacing 16. The toolbar is at the
+top-left with margin 12. The button is not keyboard-focus-traversable, and its
+action invokes the supplied Runnable. This keeps navigation out of drawing logic.
+The constructor adds Canvas/toolbar children and draws once.
+
+`protected void layoutChildren()` overrides JavaFX layout, calls super, resizes
+Canvas to the pane when needed, and calls render. `public void render()` has no
+parameters and returns void. Local GraphicsContext graphics fills the background,
+then local doubles screenX/screenY map player position using:
+
+```text
+screenX = canvas width / 2 + player.x
+screenY = canvas height / 2 + player.y
+```
+
+The player remains at world (0,0) initially, while its circle is visible at the
+center. This fixed viewport translation is not a camera that follows the player.
+fillOval subtracts the radius to position the circle's top-left and uses diameter
+24. Resizing changes the viewport offset; it does not change world position.
+Rendering reads player getters only. Moving far enough can leave the viewport;
+opposite input or restarting the demo brings the player back.
+
+Concepts include inheritance, overriding, composition, final references,
+constructor validation, JavaFX layout/controls/Canvas, lambdas, and the standard
+Runnable interface. This phase does not justify three renderer classes for one
+shape. WorldRenderer/PlayerRenderer belong to later world/assets phases.
+
+### ScreenManager.java modification
+
+Exact path: `C:\java game\src\main\java\com\shadowquest\ui\ScreenManager.java`.
+Existing final Stage stage and nullable GameLoop gameLoop remain. New private
+InputHandler input is null outside gameplay. Constructor scene/window-hidden
+listeners now call leaveGame, not just stopGameLoop. A focused-property listener
+calls input.clear when focus is lost, avoiding stuck movement after switching apps.
+
+| Method | Parameters/return | Current behavior |
+| --- | --- | --- |
+| ScreenManager | Stage stage / constructor | Stores stage and registers lifecycle/focus listeners |
+| showMainMenu | none / public void | Leaves gameplay, creates the unchanged title Scene, handles Enter by calling showGame, and shows the Stage |
+| showGame | none / public void | Leaves old session, creates/starts a Game, creates GameScreen with player and this::showMainMenu, installs Scene, creates/attaches input, shows/focuses the screen, and starts loop callbacks |
+| leaveGame | none / private void | Stops/releases timer, detaches/clears input, and sets input to null |
+| startGameLoop | DoubleConsumer update, Runnable render / public void | Existing ownership behavior: stops previous timer before creating/starting one |
+| stopGameLoop | none / public void | Existing timer-only stop/reset/release; does not itself detach input |
+
+The update lambda first calls game.update(deltaTime), then
+game.movePlayer(input.getHorizontal(), input.getVertical(), deltaTime).
+The render method reference is screen::render. Input attaches only after
+stage.setScene because scene replacement invokes old-session cleanup. The title
+never calls startGameLoop. Returning discards the current Game; next entry is a
+fresh session, not resume or persistence. No GameState return-to-menu method was
+needed for this disposable demo session.
+
+Concepts: composition, object lifetime, JavaFX event/property listeners, lambdas,
+method references targeting Runnable, and separation of presentation from rules.
+The screen controls no speed/normalization arithmetic. All calls occur on the
+JavaFX Application Thread. Main, MainMenuScreen, FrameClock, GameLoop, Character,
+Direction, GameConfig, and GameState required no Phase 2.4 source changes.
+
+### New test files
+
+All three new test classes are package-private, with implicit constructors and
+no fields. Test methods return void and use fresh local objects. The original
+69 test executions remain unchanged. No test sleeps or depends on real frame
+scheduling. Input tests use KeyCode values but do not start a JavaFX toolkit.
+
+`C:\java game\src\test\java\com\shadowquest\player\PlayerMovementTest.java`
+tests the overloaded movement contract. Local Player instances compare results;
+CsvSource parameters are axes or Direction plus axes, and ValueSource supplies
+invalid double time. Assertions use tolerance for normalized floating-point values.
+
+| Test method | Executions | Purpose |
+| --- | ---: | --- |
+| allEightDirectionsTravelAtTheSameSpeed(int horizontal, int vertical) | 8 | Direction components and total distance 50 over 0.25 seconds |
+| noInputAndZeroTimePreservePosition() | 1 | No drift with zero axes or elapsed time |
+| diagonalMovementIsIndependentOfFramePartition() | 1 | One second equals 100 steps of 0.01 seconds |
+| originalDirectionApiMatchesAxisApi(Direction, int, int) | 4 | Backward-compatible cardinal API results |
+| invalidAxesDoNotChangePosition(int, int) | 4 | Values outside [-1,1] rejected without mutation |
+| invalidTimeIsRejectedEvenWithNoInput(double) | 5 | Negative/nonfinite/overflow time rejected for diagonal and idle input |
+| deadPlayerDoesNotMoveDiagonally() | 1 | No movement after lethal damage |
+
+`C:\java game\src\test\java\com\shadowquest\input\InputHandlerTest.java`
+tests held-key semantics and input-to-Player integration using local InputHandler
+and Player objects. @EnumSource supplies Space/E/Escape. @CsvSource converts key
+names to KeyCode and supplies expected axes. Tests use set behavior without
+exposing its implementation or mutating private fields.
+
+| Test method | Executions | Purpose |
+| --- | ---: | --- |
+| mapsBothControlSchemes(KeyCode, int, int) | 8 | WASD/arrows map correctly and release returns axes to zero |
+| simultaneousKeysProduceNormalizedPlayerMovement(KeyCode, KeyCode, int, int) | 8 | Four diagonal combinations for each scheme travel 200 units in one second |
+| aliasesAndRepeatDoNotAddSpeedOrReleaseOtherKeys() | 1 | Repeats/aliases do not double movement; releasing one alias leaves the other |
+| oppositeKeysCancelAndRemainingKeyResumes() | 1 | Opposing inputs cancel and releasing a key restores remaining intent |
+| releaseStopsOnlyThatAxis() | 1 | Releasing W from W+D preserves rightward input |
+| clearAndDetachReleaseAllKeys() | 1 | Lifecycle clearing, including action inputs, and idempotent detach |
+| futureActionsAreTrackedWithoutMovement(KeyCode) | 3 | Held action state has no movement side effect |
+| unsupportedKeysAndInitialStateDoNotMove() | 1 | Unsupported Q and empty input do not move Player |
+
+`C:\java game\src\test\java\com\shadowquest\core\GameMovementTest.java`
+tests session gating through public APIs. All three methods take no parameters:
+menuIgnoresMovementWithoutCreatingAPlayer, playingMovesAndPauseGatesMovementUntilResumed,
+and defeatAndGameOverDoNotMoveEvenIfHealthIsRestored. They demonstrate object
+composition, enum assertions, and state transitions without JavaFX.
+
+Across these tests, JUnit annotations, parameterized tests, static imports,
+assertThrows lambdas, and floating-point tolerances express behavior directly.
+Production code now also demonstrates actual method overloading and EnumSet
+collections, not just planned examples.
+
+### Verification and remaining limitations
+
+Using Microsoft OpenJDK 21.0.13.0.2+1 and Maven 3.9.11, the command
+`mvnw.cmd -o -B -ntp -Dmaven.repo.local=.tools/repository clean compile test`
+passed. It compiled 13 production and 7 test files. Results: FrameClockTest 6,
+GameTest 14, CharacterTest 29, PlayerTest 20, PlayerMovementTest 24,
+InputHandlerTest 24, GameMovementTest 3. Total 120 passed, 0 failed, 0 errors,
+0 skipped. Fixed timestamp/input tests establish normalized speed mathematically;
+visual inspection alone is not used to claim numeric speed equality.
+
+The actual application ran with the documented JDK and `javafx:run`, using normal
+native-cache access. The title screen was visually inspected and preserved.
+Pressing Enter through desktop automation opened the movement screen with its
+circle, controls text, and Back to title button. Very brief tool-generated taps
+were insufficient to demonstrate held motion reliably, so the user was asked
+to hold D, then W+D, release, and try an arrow. The user explicitly confirmed
+"Movement and release work". This is user-confirmed manual GUI verification,
+separate from automated JUnit evidence.
+
+Computer Use was stopped with the physical Escape key during subsequent checks.
+No further GUI inputs were issued. Return-to-title/re-entry and focus-loss behavior
+were not manually verified in this run. Their code paths were inspected; that
+does not substitute for GUI checks. A subsequent process check confirmed the
+Maven application exited with BUILD SUCCESS and JAVAFX_EXIT=0 at 03:56:44 IST.
+The final close gesture was not observed through automation. No runtime error
+appeared in the captured log. Return/re-entry and focus-loss manual checks remain
+incomplete.
+
+Local logs are `.tools/phase2.4/clean-test.log` and
+`.tools/phase2.4/javafx-run.log`; both are ignored. No Windows security policies
+were changed. No camera, bounds, collisions, sprites, animations, enemy, combat,
+inventory, portal, or cutscene was added. The placeholder may leave the viewport.
+Future action keys have no edge-triggered gameplay behavior yet. The current
+no-clamp frame clock is preserved; long active stalls are not a physics policy.
+
+### Exact documentation/file changes
+
+Added production InputHandler.java and GameScreen.java; added PlayerMovementTest,
+InputHandlerTest, and GameMovementTest. Modified production Player.java, Game.java,
+and ScreenManager.java. This report documents each file above.
+PROJECT_PLAN.md records the current full game design, solo implementation status,
+and new roadmap while preserving the original plan. ARCHITECTURE.md records
+package mappings, new APIs, future systems, and implemented data flow.
+IMPLEMENTATION_LOG.md records Phase 2.4 and the verification limits. README.md
+now documents Enter, movement, return navigation, and the prototype limitations.
+No unrelated Java files or existing tests were modified in this phase.
+
+Phase 2.4 implementation is complete with the manual checks above outstanding.
+Phase 3 must wait for the user's separate approval. No commit or push was made.
 
 ## Maintenance rule for future phases
 

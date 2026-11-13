@@ -32,6 +32,19 @@ public class Player extends Character {
         if (direction == null) {
             throw new IllegalArgumentException("Movement direction must not be null.");
         }
+        switch (direction) {
+            case UP -> move(0, -1, deltaTime);
+            case DOWN -> move(0, 1, deltaTime);
+            case LEFT -> move(-1, 0, deltaTime);
+            case RIGHT -> move(1, 0, deltaTime);
+        }
+    }
+
+    /** Moves along digital input axes (-1, 0, 1), normalizing diagonals. */
+    public void move(int horizontal, int vertical, double deltaTime) {
+        if (horizontal < -1 || horizontal > 1 || vertical < -1 || vertical > 1) {
+            throw new IllegalArgumentException("Movement axes must be -1, 0, or 1.");
+        }
         if (!Double.isFinite(deltaTime) || deltaTime < 0) {
             throw new IllegalArgumentException("Elapsed time must be finite and non-negative.");
         }
@@ -39,14 +52,10 @@ public class Player extends Character {
         if (!Double.isFinite(distance)) {
             throw new IllegalArgumentException("Elapsed time is too large for movement.");
         }
-        if (!isAlive()) {
+        if (!isAlive() || (horizontal == 0 && vertical == 0)) {
             return;
         }
-        switch (direction) {
-            case UP -> moveBy(0, -distance);
-            case DOWN -> moveBy(0, distance);
-            case LEFT -> moveBy(-distance, 0);
-            case RIGHT -> moveBy(distance, 0);
-        }
+        double length = Math.hypot(horizontal, vertical);
+        moveBy(horizontal / length * distance, vertical / length * distance);
     }
 }

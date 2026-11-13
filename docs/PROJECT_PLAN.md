@@ -1,5 +1,73 @@
 # Shadow Quest: The Lost Realm — Project Plan
 
+## Current direction and roadmap: November 14, 2026
+
+This dated revision is the current design direction supplied for Phase 2.4.
+The original plan below is preserved as history; where it differs, this revision
+takes precedence. The project remains a college group project, but the user is
+currently handling all coding, architecture, and integration. The earlier
+five-member assignments are historical, not current task assignments.
+
+### Confirmed game design
+
+Shadow Quest is a top-down 2D fantasy adventure with eight-directional movement,
+real-time combo-based sword combat, and illustrated, hand-drawn fantasy visuals.
+Arin discovers a mysterious portal while exploring a forest and enters Eldoria,
+a realm corrupted by the Shadow Lord. The planned opening shows arrival, a short
+montage of several days exploring, the realization that Arin is trapped, and the
+discovery that defeating the dark forces and restoring ancient portals will let
+him return home. Player control begins in Mystic Forest. Important story moments
+will have skippable cutscenes. These cinematics are planned, not implemented.
+
+| Level | Planned content |
+| --- | --- |
+| Mystic Forest | Goblins, wolves, basic enemies, first key |
+| Ancient Ruins | Skeletons, dark archers, puzzles, stronger weapons |
+| Shadow Dungeon | Elite enemies, difficult combat, mini-boss |
+| Shadow Castle | Final enemies and Shadow Lord boss encounter |
+
+Progression must use actual portals. Defeating the final enemy activates or helps
+unlock progression; it must not automatically switch levels. The player must
+approach the activated portal and press E. Portal rules are a future phase.
+
+Planned player data includes health, attack power, defence, speed, coins, equipped
+weapon, and inventory. Only the initial statistics, health, and movement exist
+today. Combat begins with a three-hit sword combo, attack animations and hit
+windows, enemy damage/defeat, and enemy-specific behavior. Rewards and upgrades
+include coins, potions, weapons, armour, upgrade materials, and rare quest items.
+Proposed weapons progress through Basic Sword, Iron Sword, Steel Sword, and
+Shadow Blade. These systems are not part of Phase 2.4.
+
+The planned top-right HUD shows health, coins, equipped weapon, and inventory
+access. Pause, inventory, upgrade, game-over, victory, and boss-health displays
+remain planned. The temporary movement screen is not this final HUD or art style.
+
+### Current development sequence
+
+| Phase | Scope | Status at Phase 2.4 |
+| --- | --- | --- |
+| 0 | Maven setup and JavaFX launch | Setup complete; launch later verified in 2.1 |
+| 1 | Core domain foundation | Initial player, health, directions, states complete |
+| 2 | JavaFX screen, Canvas, game loop | Foundations implemented in 2.1–2.3 |
+| 2.4 | Keyboard input and player movement | Eight-direction movement integration implemented; verification in development report |
+| 3 | Camera and world rendering | Planned |
+| 4 | Player animations and illustrated assets | Planned |
+| 5 | Enemy system and AI | Planned |
+| 6 | Combat and combo system | Planned |
+| 7 | Items, inventory and health | Planned expansion of existing health model |
+| 8 | Coins, rewards and upgrades | Planned |
+| 9 | Level objectives, keys and portals | Planned |
+| 10 | Four levels and boss encounters | Planned |
+| 11 | Cutscenes, menus and UI | Planned |
+| 12 | Testing, balancing and bug fixing | Planned; tests also run throughout development |
+
+Java 21, JavaFX 21, Canvas, and Maven remain agreed technologies. Implement only
+the phase explicitly authorized. Do not pre-create empty classes from the target
+architecture. The user reserves commit/push decisions; no publication is implied
+by completing a phase.
+
+## Original project plan, retained for history
+
 > **Project type:** Group Java class project  
 > **Team size:** 5 members  
 > **Language:** Java  

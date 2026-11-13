@@ -1,5 +1,44 @@
 # Implementation log
 
+## November 14, 2026: Phase 2.4 input and movement
+
+The current implementation connects InputHandler -> GameLoop -> Game.movePlayer
+-> Player.move -> GameScreen Canvas. Enter leaves the unchanged static title for
+a fresh movement demo. WASD/arrows support eight directions with normalized
+diagonal speed; release stops the relevant axis, opposing keys cancel, and aliases
+do not multiply speed. Space/E/Escape are tracked only. Back to title is available
+as a button. Scene replacement/window hiding detach input and stop the loop;
+losing focus clears keys. No timer runs on the title screen.
+
+Added InputHandler.java and GameScreen.java. Modified Player.java with a digital
+axis overload shared by the original Direction API, Game.java with PLAYING-gated
+movePlayer, and ScreenManager.java with scene/input/session lifecycle wiring.
+Character, Direction, MainMenuScreen, GameLoop, FrameClock, and all existing tests
+were preserved. The initial world origin remains (0,0); rendering adds a fixed
+viewport-center offset. This is not a camera. No collision bounds are present.
+
+Added PlayerMovementTest (24 executions), InputHandlerTest (24), and
+GameMovementTest (3). Clean compilation and the full suite passed: 120 tests,
+0 failures/errors/skips, including the original 69. Command, after the documented
+JDK 21 setup: `mvnw.cmd -o -B -ntp -Dmaven.repo.local=.tools/repository clean compile test`.
+Thirteen production and seven test files compiled. Logs remain under ignored
+`.tools/phase2.4/`.
+
+Actual Maven JavaFX launch and visual title/game-screen entry were verified.
+The user confirmed held D, W+D, key release, and arrow movement worked in response
+to the manual check. Desktop automation was subsequently stopped with Escape;
+return navigation/re-entry and focus-loss clearing were not manually verified in this run. A later process check confirmed BUILD SUCCESS and JAVAFX_EXIT=0 at 03:56:44 IST. The final close gesture was not observed through automation. No runtime exception appeared in the captured log.
+
+PROJECT_DEVELOPMENT_REPORT.md contains the current file-wise learning guide.
+PROJECT_PLAN.md and ARCHITECTURE.md now preserve the user's expanded story,
+systems blueprint, Phase 0–12 roadmap and the current API/package decisions.
+The user currently owns all coding, architecture, and integration; earlier member
+assignments below are historical. README includes controls and limitations.
+Earlier phase history and all uncommitted work were preserved. No commit, push,
+merge, remote change, or Phase 3 implementation was performed.
+
+The remaining entries below describe their dates, not current GUI/input status.
+
 ## November 13, 2026: continuation verification
 
 Reviewed the requested core-foundation scope and found no unfinished implementation

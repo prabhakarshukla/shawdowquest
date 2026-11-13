@@ -1,5 +1,92 @@
 # Shadow Quest: The Lost Realm — Technical Architecture
 
+## Phase 2.4 architecture revision: November 14, 2026
+
+This revision records the current source contracts and the user's expanded
+blueprint. The original proposal below remains historical design context.
+The user currently owns all implementation, architecture, and integration;
+no new division of work among team members is prescribed here.
+
+### Package mapping and future systems
+
+Working classes stay in their existing packages. The latest conceptual blueprint
+uses entities, rendering, and utilities; these map to current player/enemy,
+render, and utils respectively. Main stays in app. There is no migration or
+second copy of Character, Player, Main, or the renderer responsibilities.
+
+| Existing or future package | Responsibilities and planned classes |
+| --- | --- |
+| app | Existing Main starts JavaFX and delegates screen presentation |
+| core | Existing Game, GameState, GameConfig, GameLoop, FrameClock coordinate state, timing and update/render scheduling |
+| player, enemy | Existing Character/Player; future Enemy, Goblin, Wolf, Skeleton, DarkArcher, ShadowLord and their behaviors |
+| input | InputHandler tracks held movement/action keys, separate from player rules |
+| render | Future GameRenderer, WorldRenderer, PlayerRenderer draw state without mutating it |
+| world | Future GameWorld, Camera, CollisionManager, Portal for world data, camera following, collisions and portal interaction |
+| combat | Future CombatSystem, Attack, ComboSystem for damage, hit windows and combo timing |
+| items | Future Item, Weapon, HealthPotion, Key |
+| inventory | Future Inventory for carried items; use one implementation, not duplicate storage in items |
+| levels | Future Level and LevelManager for objectives and transitions across four levels |
+| ui | Existing ScreenManager/MainMenuScreen; minimal GameScreen now; future HUD, PauseMenu, InventoryScreen and other menus |
+| utils, persistence | Existing Direction; future genuinely shared helpers and save/load services |
+
+Only InputHandler and GameScreen are introduced in Phase 2.4. No empty future
+classes, duplicate systems, or new packages for unused functionality are added.
+The future full flow is input -> game update -> player/enemies/combat/world ->
+renderers/HUD -> Canvas. Game rules decide outcomes, rendering draws state, and
+input translates user actions. PROJECT_PLAN.md contains the current story,
+four-level portal design, planned features, and Phase 0–12 roadmap.
+
+### Implemented movement path
+
+```text
+Main -> ScreenManager.showMainMenu -> unchanged static Canvas title (no timer)
+  Enter -> ScreenManager.showGame -> new Game.startNewGame + GameScreen
+  Scene key filters -> InputHandler EnumSet<KeyCode>
+  GameLoop.handle -> Game.update(delta) -> Game.movePlayer(horizontal, vertical, delta)
+    -> Player.move(int, int, double) -> Character.moveBy
+  GameLoop render callback -> GameScreen.render -> placeholder circle on Canvas
+  Back to title / Scene replacement / window hidden -> stop loop + detach/clear input
+```
+
+The title retains its appearance; Enter is a minimal navigation shortcut managed
+by ScreenManager. Gameplay supplies a Back to title button. Each entry starts a
+fresh Game and Player; there is no resume/save menu yet. Character and GameState
+remain unchanged. Game and Player never import JavaFX or KeyCode.
+
+### New or refined contracts
+
+- `InputHandler.attach(Scene)` and `detach()` install/remove the same stored key
+  filters. Reattaching detaches the previous scene first. `press(KeyCode)`,
+  `release(KeyCode)`, `isPressed(KeyCode)`, `clear()` expose held-key operations.
+- `getHorizontal()` and `getVertical()` return int -1, 0, or 1. W/Up, S/Down,
+  A/Left, D/Right are aliases. Same-direction aliases never double speed;
+  opposite directions cancel. Space, E, Esc are tracked only; combat, interaction,
+  and pause actions are not implemented.
+- `Player.move(int horizontal, int vertical, double deltaTime)` accepts digital
+  axes in [-1,1], validates time, normalizes the nonzero vector, then applies
+  speed * seconds through Character.moveBy. The original Direction overload
+  delegates to this method; Direction remains the existing four-value enum.
+- `Game.movePlayer(int, int, double)` delegates only in PLAYING. Other states
+  ignore the command. Player still owns movement validation and arithmetic;
+  Game owns session gating. Existing update(double) behavior is preserved.
+- GameScreen owns only presentation, with `GameScreen(Player, Runnable)` and
+  `render()`. ScreenManager creates the session, attaches input, and supplies the
+  separate update/render callbacks after installing the Scene.
+
+All event and loop work stays on the JavaFX Application Thread. Losing window
+focus clears held keys so an unseen release cannot leave movement stuck. Scene
+replacement and window hiding stop the loop and detach input. Future code that
+replaces only a Scene root must explicitly leave the active session first.
+
+The player still starts at world (0,0). For this movement demo the screen maps
+world position to (Canvas width/2 + x, Canvas height/2 + y), a fixed viewport
+offset, not a following camera. Positive X is right and positive Y is down.
+The radius-12 circle is temporary. There are no world bounds or collisions;
+the player can leave the viewport. Use opposite movement or return to title and
+start again. No camera, illustrated asset, sprite animation or level is implied.
+
+## Original architecture proposal, retained for history
+
 > **Status:** Initial architecture proposal  
 > **Language:** Java 21  
 > **GUI/rendering:** JavaFX 21 + Canvas  

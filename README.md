@@ -1,14 +1,13 @@
 # Shadow Quest: The Lost Realm
 
 A five-member college project built with Java 21, JavaFX 21, and Maven.
-The UI remains a 960 x 600 title window. The Phase 1 core foundation adds
-independent game-state, character-health, and player-movement models with JUnit 5
-tests. These models are not yet connected to keyboard input or the screen.
-Combat, menu actions, and Canvas world rendering belong to later tasks.
+Phase 2.4 connects keyboard input, the game loop, and player movement to a
+temporary Canvas gameplay screen. The user currently handles coding,
+architecture, and integration. Combat and world rendering remain future work.
 
 The source of truth is [PROJECT_PLAN.md](docs/PROJECT_PLAN.md) and
-[ARCHITECTURE.md](docs/ARCHITECTURE.md). The copies in `docs/` match the supplied
-planning documents.
+[ARCHITECTURE.md](docs/ARCHITECTURE.md). Dated revisions preserve the original
+plans while recording the current roadmap and implemented contracts.
 
 ## Requirements
 
@@ -60,7 +59,11 @@ If Maven 3.9.11 is installed, the equivalent commands are `mvn clean compile`,
 `mvn test`, and `mvn javafx:run`.
 
 Expected result: a dark window with "Shadow Quest: The Lost Realm" centered in
-light text. Resize the window to check that the title remains readable. Close
+light text. Press **Enter** to start the movement demo. Hold **WASD or arrow keys**
+to move the circle, including diagonally; release to stop. Click **Back to title**
+to leave. Re-entering starts a fresh player. Space, E, and Esc are reserved inputs
+with no action yet. There is no camera or collision boundary, so the circle can
+leave the viewport; move back or restart from the title. Close
 the window using its title-bar close button; Maven should report `BUILD SUCCESS`.
 
 `test` runs JUnit 5 tests for game transitions, player initialization, movement,
@@ -75,15 +78,18 @@ dependency. Reports are written to `target/surefire-reports/`.
 |-- mvnw / mvnw.cmd                 Maven Wrapper launchers
 |-- .mvn/wrapper/                   Wrapper version and Maven download settings
 |-- .github/PULL_REQUEST_TEMPLATE.md
-|-- docs/                          Unmodified project plan and architecture
+|-- docs/                          Plans, current roadmap, architecture, learning report
 |-- src/main/java/com/shadowquest/
 |   |-- app/Main.java               JavaFX entry point
 |   |-- core/GameConfig.java        Title and initial viewport dimensions
 |   |-- core/GameState.java         Session state enum
 |   |-- core/Game.java              Session transitions and death detection
+|   |-- core/FrameClock.java        Frame timestamps to elapsed seconds
+|   |-- core/GameLoop.java          JavaFX update/render scheduling
 |   |-- ui/ScreenManager.java       Stage and screen presentation
 |   |-- ui/MainMenuScreen.java      Minimal launch-screen layout
-|   |-- input/                     Reserved for input handling
+|   |-- ui/GameScreen.java          Temporary Canvas player and return button
+|   |-- input/InputHandler.java     Held movement/action keys
 |   |-- player/Character.java      Shared stats, health, and position
 |   |-- player/Player.java         Player initialization and movement
 |   |-- enemy/                     Reserved for enemies and combat

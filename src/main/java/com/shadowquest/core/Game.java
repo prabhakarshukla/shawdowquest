@@ -16,6 +16,13 @@ public class Game {
         return player;
     }
 
+    /** Applies movement only to the active session; other states ignore the command. */
+    public void movePlayer(int horizontal, int vertical, double deltaTime) {
+        if (state == GameState.PLAYING) {
+            player.move(horizontal, vertical, deltaTime);
+        }
+    }
+
     /** Starts from the menu or restarts after defeat; other states are unchanged. */
     public void startNewGame() {
         if (state == GameState.MENU || state == GameState.GAME_OVER) {
